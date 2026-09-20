@@ -38,7 +38,7 @@ const STORE_ROOT = join(BUILD_ROOT, 'store')
 const RUNTIME_ROOT = BUILD_PATHS.runtime
 const PNPM_BUILD_STATE = BUILD_PATHS.dshPnpm
 const PACKAGE_SET_ROOT = BUILD_PATHS.packageSet
-const NODE = join(BUILD_PATHS.electron, process.platform === 'win32' ? 'electron.exe' : 'Electron.app/Contents/MacOS/Electron')
+const NODE = join(BUILD_PATHS.electron, process.platform === 'win32' ? 'electron.exe' : process.platform === 'linux' ? 'electron' : 'Electron.app/Contents/MacOS/Electron')
 const PNPM = join(RUNTIME_ROOT, 'pnpm', 'bin', 'pnpm.mjs')
 
 function manifestVersion(path: string, subject: string): string {
@@ -105,6 +105,46 @@ function runPnpm(args: readonly string[]): Promise<void> {
   })
 }
 
+/**
+ * The packaged libvips statically links its own glib, whose symbols Electron's system glib
+ * preempts on Linux, corrupting image input decoding (electron#46323). Rebuild sharp against the
+ * system-wide libvips so the runtime and Electron share a single glib.
+ */
+function rebuildLinuxSharp(root: string): Promise<void> {
+  const sharpDir = join(root, 'node_modules', 'sharp')
+  const prebuiltDir = join(root, 'node_modules', '@img', 'sharp-linux-x64', 'lib')
+  if (!existsSync(sharpDir) || !existsSync(prebuiltDir)) {
+    return Promise.reject(new Error('desktop runtime: sharp Linux runtime libraries are missing'))
+  }
+  return new Promise((resolvePromise, reject) => {
+    execFile(process.execPath, ['install/build.js'], {
+      cwd: sharpDir,
+      timeout: 900_000,
+      env: {
+        ...process.env,
+        SHARP_FORCE_GLOBAL_LIBVIPS: '1',
+        NODE_PATH: '/usr/lib/node_modules',
+        npm_config_node_gyp: '/usr/bin/node-gyp',
+      },
+    }, (error, stdout, stderr) => {
+      if (error !== null) {
+        reject(new Error(`desktop runtime: sharp rebuild failed: ${stderr}`, { cause: error }))
+        return
+      }
+      const version = manifestVersion(join(sharpDir, 'package.json'), 'sharp')
+      const built = join(sharpDir, 'src', 'build', 'Release', `sharp-linux-x64-${version}.node`)
+      if (!existsSync(built)) {
+        reject(new Error(`desktop runtime: sharp rebuild produced no ${built}`))
+        return
+      }
+      copyFileSync(built, join(prebuiltDir, `sharp-linux-x64-${version}.node`))
+      rmSync(join(sharpDir, 'src', 'build'), { recursive: true, force: true })
+      process.stdout.write(stdout)
+      resolvePromise()
+    })
+  })
+}
+
 async function main(): Promise<void> {
   rmSync(DSH_OUTPUT_ROOT, { recursive: true, force: true })
   rmSync(PNPM_BUILD_STATE, { recursive: true, force: true })
@@ -131,6 +171,7 @@ async function main(): Promise<void> {
       recursive: true, dereference: true,
       filter: source => desktopRuntimeFileExclusion(relative(modules, source), target, officeEngine) === undefined,
     })
+    if (process.platform === 'linux') await rebuildLinuxSharp(DSH_OUTPUT_ROOT)
     writeFileSync(join(DSH_OUTPUT_ROOT, 'package.json'), `${JSON.stringify({
       name: '@deepseek-ai/dsh-desktop-runtime', private: true, version: release.version, type: 'module',
       dependencies: Object.fromEntries(packageSet.packages.map(entry => [entry.name, entry.version])),

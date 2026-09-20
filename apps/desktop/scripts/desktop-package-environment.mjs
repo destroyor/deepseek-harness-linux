@@ -24,7 +24,7 @@ const FILE_SETTINGS = ['DSH_DESKTOP_WINDOWS_CER_FILE', 'DSH_DESKTOP_WINDOWS_SIGN
  * @returns {NodeJS.ProcessEnv} Isolated environment with file-owned release settings.
  */
 export function loadDesktopPackageEnvironment(platform, environment = process.env, appRoot = APP_ROOT) {
-  const path = join(appRoot, platform === 'win32' ? '.env.windows' : '.env.macos')
+  const path = join(appRoot, platform === 'win32' ? '.env.windows' : platform === 'linux' ? '.env.linux' : '.env.macos')
   let contents
   try {
     contents = readFileSync(path, 'utf8')
@@ -40,7 +40,7 @@ export function loadDesktopPackageEnvironment(platform, environment = process.en
     // Parser diagnostics can contain credential-bearing input.
     throw new Error(`desktop package: invalid dotenv syntax in ${path}`)
   }
-  const platformSetting = platform === 'win32' ? WINDOWS_SETTING : MACOS_SETTING
+  const platformSetting = platform === 'win32' ? WINDOWS_SETTING : platform === 'linux' ? SHARED_SETTING : MACOS_SETTING
   for (const name of Object.keys(settings)) {
     if (!SHARED_SETTING.test(name) && !platformSetting.test(name)) {
       throw new Error(`desktop package: unsupported setting ${name} in ${path}; use the platform template`)
@@ -85,7 +85,7 @@ export function validateDesktopPackageEnvironment(environment, target, options =
       tokenPin: environment.DSH_DESKTOP_WINDOWS_TOKEN_PIN,
       keyContainer: environment.DSH_DESKTOP_WINDOWS_KEY_CONTAINER,
     })
-  } else {
+  } else if (target.platform === 'darwin') {
     resolveMacOSSigningEnvironment(environment)
     const strategies = [
       ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID'],
