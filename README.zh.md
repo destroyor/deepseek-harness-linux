@@ -28,7 +28,7 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 | `apps/desktop/scripts/prepare-primary-runtime.ts` | 主运行时平台上报为 `linux` |
 | `apps/desktop/scripts/prepare-dsh.ts` | Linux 的 `electron` 路径；打包时把 `sharp` 重新链接到系统 libvips |
 | `apps/desktop/scripts/primary-runtime-lock.json` | 补上 `linux-x64` 的 Node 压缩包、Python 构建与 wheel 的 URL 及 SHA-256 |
-| `apps/desktop/scripts/electron-builder-config.mjs` | Linux 图标与 `executableName: 'deepseek-harness'` |
+| `apps/desktop/scripts/electron-builder-config.mjs` | Linux 图标、`executableName: 'deepseek-harness'`，且不注入强制更新策略 |
 | `apps/desktop/.env.linux`（新增） | Linux 发布配置；对齐 `.env.windows.example`，不含签名凭据 |
 
 ### Linux 上的 `sharp` 崩溃与修复
@@ -92,6 +92,8 @@ readelf -d apps/desktop/.desktop-build/targets/linux-x64/artifacts/linux-unpacke
 - 非官方改动，上游不予支持；锁定标签更新后补丁可能需要同步调整。
 - `apps/desktop/.env.linux` 选择的是 `test` 自动更新源。
 - 在 Electron 下 `sharp` 仍会打印 `[SharpElectronLinux]` 警告；改用系统 libvips 后它已是无害提示。
+- Linux 构建不注入强制更新策略：该策略服务只提供 Windows 与 macOS 通道，而桌面端在存在策略时会拒绝
+  在其它平台上启动。
 
 ## 开发者预览
 

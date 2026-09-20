@@ -29,7 +29,7 @@ It also fixes the `sharp` image-decoding crash that otherwise makes the packaged
 | `apps/desktop/scripts/prepare-primary-runtime.ts` | Report `linux` as the primary runtime platform |
 | `apps/desktop/scripts/prepare-dsh.ts` | Linux `electron` path; rebuild `sharp` against the system libvips while packaging |
 | `apps/desktop/scripts/primary-runtime-lock.json` | Node archive, Python build and wheel URLs plus their SHA-256 for `linux-x64` |
-| `apps/desktop/scripts/electron-builder-config.mjs` | Linux icon and `executableName: 'deepseek-harness'` |
+| `apps/desktop/scripts/electron-builder-config.mjs` | Linux icon, `executableName: 'deepseek-harness'`, and no mandatory-update policy |
 | `apps/desktop/.env.linux` (new) | Linux release settings; mirrors `.env.windows.example`, no signing credentials |
 
 ### The `sharp` crash on Linux, and the fix
@@ -95,6 +95,8 @@ Electron (`ELECTRON_RUN_AS_NODE=1`) exits 0, where it previously segfaulted on e
 - Unofficial and unsupported by upstream; the patch will need updating when the pinned tag moves.
 - `apps/desktop/.env.linux` selects the `test` auto-update origins.
 - `sharp` still prints its `[SharpElectronLinux]` warning under Electron; with the system libvips it is benign.
+- Linux builds carry no mandatory-update policy: the policy service serves Windows and macOS only, and the
+  desktop shell refuses to start on other platforms while a policy is present.
 
 ## Developer preview
 
