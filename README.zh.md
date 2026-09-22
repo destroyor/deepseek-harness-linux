@@ -13,7 +13,8 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 本仓库是官方源码 `dsh-v0.1.6-alpha.2` 标签的快照，并附带一个补丁，为 `pnpm run package:desktop:dir`
 增加了 `linux-x64` 桌面构建目标。上游只发布 `mac-arm64`、`mac-x64` 与 `win-x64`，不支持 Linux 桌面构建。
 
-该补丁还修复了 `sharp` 的图片解码崩溃——否则打包后的应用在 Linux 上无法正常使用。
+该补丁还修复了 `sharp` 的图片解码崩溃——否则打包后的应用在 Linux 上无法正常使用；并让 Linux 窗口获得
+Windows 上已有的无边框标题栏。
 
 ### 补丁改了什么
 
@@ -30,6 +31,9 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 | `apps/desktop/scripts/primary-runtime-lock.json` | 补上 `linux-x64` 的 Node 压缩包、Python 构建与 wheel 的 URL 及 SHA-256 |
 | `apps/desktop/scripts/electron-builder-config.mjs` | Linux 图标、`executableName: 'deepseek-harness'`，且不注入强制更新策略 |
 | `apps/desktop/.env.linux`（新增） | Linux 发布配置；对齐 `.env.windows.example`，不含签名凭据 |
+| `apps/desktop/src/main.ts` | Linux 并入「隐藏标题栏 + 窗口控件覆盖层」路径，不再安装原生菜单栏，并把已安装的 `.desktop` 文件名声明为 shell 的应用 ID |
+| `apps/desktop/src/preload-windows.ts` | Linux 上同样发布标题栏标记、应用/编辑菜单项与标题栏配色 |
+| `apps/desktop/tests/main-startup.spec.ts` / `preload-windows.client.spec.ts` | 覆盖 Linux 的标题栏、菜单与标题栏菜单行为 |
 
 ### Linux 上的 `sharp` 崩溃与修复
 
@@ -94,6 +98,11 @@ readelf -d apps/desktop/.desktop-build/targets/linux-x64/artifacts/linux-unpacke
 - 在 Electron 下 `sharp` 仍会打印 `[SharpElectronLinux]` 警告；改用系统 libvips 后它已是无害提示。
 - Linux 构建不注入强制更新策略：该策略服务只提供 Windows 与 macOS 通道，而桌面端在存在策略时会拒绝
   在其它平台上启动。
+- Linux 标题栏使用 Electron 的窗口控件覆盖层（Window Controls Overlay），窗口按钮由 Electron 依据页面
+  上报的颜色绘制，不再跟随 GTK 主题。
+- Linux 的程序坞图标通过 XDG 应用 ID 关联，而该 ID 由 Electron 从 `app.name` 推导——这里是 npm 包名，
+  任何已安装的 `.desktop` 条目都不叫这个名字。因此 shell 在 `ready` 之前声明桌面名为
+  `deepseek-harness`；缺少这一步时，程序坞会退回通用可执行文件图标。
 
 ## 开发者预览
 

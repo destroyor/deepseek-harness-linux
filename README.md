@@ -14,7 +14,8 @@ This repository is a snapshot of the official source at tag `dsh-v0.1.6-alpha.2`
 a `linux-x64` desktop build target to `pnpm run package:desktop:dir`. Upstream only ships `mac-arm64`,
 `mac-x64` and `win-x64`, and does not support the Linux desktop build.
 
-It also fixes the `sharp` image-decoding crash that otherwise makes the packaged app unusable on Linux.
+It also fixes the `sharp` image-decoding crash that otherwise makes the packaged app unusable on Linux, and
+gives the Linux window the same frameless caption Windows already had.
 
 ### What the patch changes
 
@@ -31,6 +32,9 @@ It also fixes the `sharp` image-decoding crash that otherwise makes the packaged
 | `apps/desktop/scripts/primary-runtime-lock.json` | Node archive, Python build and wheel URLs plus their SHA-256 for `linux-x64` |
 | `apps/desktop/scripts/electron-builder-config.mjs` | Linux icon, `executableName: 'deepseek-harness'`, and no mandatory-update policy |
 | `apps/desktop/.env.linux` (new) | Linux release settings; mirrors `.env.windows.example`, no signing credentials |
+| `apps/desktop/src/main.ts` | Linux joins the hidden-titlebar and window-controls-overlay path, installs no native menu bar, and declares the installed `.desktop` filename as the shell's application ID |
+| `apps/desktop/src/preload-windows.ts` | Publish the caption marker, Application/Edit entries and titlebar colors on Linux as well |
+| `apps/desktop/tests/main-startup.spec.ts` / `preload-windows.client.spec.ts` | Cover the Linux titlebar, menu and caption behavior |
 
 ### The `sharp` crash on Linux, and the fix
 
@@ -97,6 +101,12 @@ Electron (`ELECTRON_RUN_AS_NODE=1`) exits 0, where it previously segfaulted on e
 - `sharp` still prints its `[SharpElectronLinux]` warning under Electron; with the system libvips it is benign.
 - Linux builds carry no mandatory-update policy: the policy service serves Windows and macOS only, and the
   desktop shell refuses to start on other platforms while a policy is present.
+- The Linux caption uses Electron's Window Controls Overlay, so the window buttons are drawn by Electron
+  from the colors the page reports rather than by the GTK theme.
+- Linux shell integration resolves the window icon through the XDG application ID, which Electron derives
+  from `app.name` — here the npm package name, which no installed `.desktop` entry carries. The shell
+  therefore declares `deepseek-harness` as its desktop name before `ready`; without it the dock falls back
+  to a generic executable glyph.
 
 ## Developer preview
 

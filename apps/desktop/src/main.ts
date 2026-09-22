@@ -48,6 +48,14 @@ let windowsLanguage: string | undefined
 function currentDesktopLocale(): ReturnType<typeof resolveDesktopLocale> {
   return resolveDesktopLocale(windowsLanguage ?? app.getLocale())
 }
+
+/**
+ * Platforms that hide the native titlebar and host the Application/Edit caption
+ * entries inside the page instead of a native menu bar.
+ */
+function usesNativeCaption(): boolean {
+  return process.platform === 'win32' || process.platform === 'linux'
+}
 const recovery = new DesktopFatalRecovery({
   messages: () => currentDesktopLocale().messages,
   show: options => dialog.showMessageBox(options),
@@ -78,6 +86,13 @@ protocol.registerSchemesAsPrivileged([{
     codeCache: true,
   },
 }])
+
+// Linux shell integration resolves a window's icon through the XDG application ID, which
+// Electron derives from app.name — the npm package name here, which no installed .desktop
+// entry carries. Name the entry this build installs so the dock finds the icon instead of
+// falling back to a generic executable glyph. The ID is reported when a window is mapped,
+// so this has to run before 'ready'.
+if (process.platform === 'linux') app.setDesktopName('deepseek-harness')
 
 interface RuntimeResources {
   readonly nodeBin: string
@@ -115,7 +130,9 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
     minWidth: 880,
     minHeight: 600,
     show,
-    ...(process.platform === 'win32' && primary ? {
+    // Windows and Linux keep the native window controls in an overlay while the
+    // page draws the caption row, so neither needs a separate native menu bar.
+    ...(primary && usesNativeCaption() ? {
       titleBarStyle: 'hidden' as const,
       titleBarOverlay: { height: WINDOWS_TITLEBAR_HEIGHT, color: nativeTheme.shouldUseDarkColors ? '#1b1b1c' : '#f9fafb',
         symbolColor: nativeTheme.shouldUseDarkColors ? '#f9fafb' : '#0f1115' },
@@ -586,10 +603,9 @@ async function main(): Promise<void> {
   })
   // A custom application menu replaces Electron's default menu, so macOS needs
   // its standard menus and application hide commands declared explicitly.
+  // Windows and Linux draw the Application/Edit caption entries inside the page
+  // instead, so a native menu bar there would only consume a spare row.
   const darwin = process.platform === 'darwin'
-  const platformMenus: MenuItemConstructorOptions[] = darwin
-    ? [{ role: 'fileMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]
-    : [{ role: 'editMenu' }]
   const hideCommands: MenuItemConstructorOptions[] = darwin
     ? [{ role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }]
     : []
@@ -599,14 +615,16 @@ async function main(): Promise<void> {
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
     { type: 'separator' },
     ...hideCommands,
-    { role: 'quit', ...(process.platform === 'win32' ? { label: currentDesktopLocale().messages.exitApplication } : {}) },
+    { role: 'quit', ...(darwin ? {} : { label: currentDesktopLocale().messages.exitApplication }) },
   ]
-  Menu.setApplicationMenu(process.platform === 'win32' ? null : Menu.buildFromTemplate([{
-    label: darwin ? app.name : currentDesktopLocale().messages.application,
-    submenu: applicationItems(),
-  }, ...platformMenus]))
+  Menu.setApplicationMenu(darwin ? Menu.buildFromTemplate([
+    { label: app.name, submenu: applicationItems() },
+    { role: 'fileMenu' },
+    { role: 'editMenu' },
+    { role: 'windowMenu' },
+  ]) : null)
 
-  if (process.platform === 'win32') {
+  if (usesNativeCaption()) {
     ipcMain.handle(DESKTOP_IPC.windowsMenu, (event, name: unknown, x: unknown, y: unknown) => {
       assertDesktopSender(event, ['app'])
       if (mainWindow === undefined || event.sender !== mainWindow.webContents
